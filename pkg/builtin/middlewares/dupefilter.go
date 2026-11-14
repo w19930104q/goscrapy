@@ -141,6 +141,13 @@ func DupeFilter(cfg ...*Config) middlewaremanager.Middleware {
 
 	return func(next http.RoundTripper) http.RoundTripper {
 		return middlewaremanager.MiddlewareFunc(func(req *http.Request) (*http.Response, error) {
+			// requests replayed by the retry middleware are not duplicates;
+			// without this exemption a DupeFilter registered before Retry
+			// would block every attempt after the first one.
+			if req.Context().Value(retryAttemptContextKey{}) != nil {
+				return next.RoundTrip(req)
+			}
+
 			signature, err := generateRequestFingerprint(req)
 			if err != nil {
 				return nil, fmt.Errorf("dupefilter.go:DupeFilter: error generating request signature %w", err)
